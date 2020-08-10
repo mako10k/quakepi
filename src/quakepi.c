@@ -23,8 +23,9 @@
 
 #define FFT_LOG2 9
 #define FFT_SIZE (1<<(FFT_LOG2))
-#define FFT_HALF_SIZE (1<<(FFT_LOG2 - 1))
 #define SAMPLE_PERIOD 0.01
+#define FFT_HALF_SIZE (1<<((FFT_LOG2) - 1))
+#define FFT_FREQ_SIZE ((FFT_HALF_SIZE) + 1)
 
 static int
 qp_i2c_open (int bus)
@@ -80,9 +81,9 @@ qp_i2c_write (int fd, int addr, int reg, const uint8_t * buf, size_t len)
 static double *
 magnitude_filter_fr (double sample_period, size_t samples)
 {
-  double *filter_fr = malloc (sizeof (double) * samples);
+  double *filter_fr = malloc (sizeof (double) * (samples / 2 + 1));
   filter_fr[0] = 0;
-  for (int i = 1; i < samples; i++)
+  for (int i = 1; i < (samples / 2 + 1); i++)
     {
       double fq = ((double) i / samples) / sample_period;
       double X2 = (fq / 10) * (fq / 10);
@@ -109,9 +110,9 @@ magnitude_thread (void *arg)
 {
   int16_t *p_from = arg;
   int16_t p[FFT_HALF_SIZE * 3];
-  fftw_complex t[3][FFT_SIZE];
-  fftw_complex f[FFT_SIZE];
-  fftw_complex u[3][FFT_SIZE];
+  double t[3][FFT_SIZE];
+  fftw_complex f[FFT_FREQ_SIZE];
+  double u[3][FFT_SIZE];
   double *frs;
   double m[FFT_SIZE];
   int count = 0;
@@ -128,27 +129,18 @@ magnitude_thread (void *arg)
 
   fftw_plan plan_fwd[3];
   fftw_plan plan_bck[3];
-  plan_fwd[0] =
-    fftw_plan_dft_1d (FFT_SIZE, t[0], f, FFTW_FORWARD, FFTW_ESTIMATE);
-  plan_fwd[1] =
-    fftw_plan_dft_1d (FFT_SIZE, t[1], f, FFTW_FORWARD, FFTW_ESTIMATE);
-  plan_fwd[2] =
-    fftw_plan_dft_1d (FFT_SIZE, t[2], f, FFTW_FORWARD, FFTW_ESTIMATE);
-  plan_bck[0] =
-    fftw_plan_dft_1d (FFT_SIZE, f, u[0], FFTW_BACKWARD, FFTW_ESTIMATE);
-  plan_bck[1] =
-    fftw_plan_dft_1d (FFT_SIZE, f, u[1], FFTW_BACKWARD, FFTW_ESTIMATE);
-  plan_bck[2] =
-    fftw_plan_dft_1d (FFT_SIZE, f, u[2], FFTW_BACKWARD, FFTW_ESTIMATE);
+  plan_fwd[0] = fftw_plan_dft_r2c_1d (FFT_SIZE, t[0], f, FFTW_ESTIMATE);
+  plan_fwd[1] = fftw_plan_dft_r2c_1d (FFT_SIZE, t[1], f, FFTW_ESTIMATE);
+  plan_fwd[2] = fftw_plan_dft_r2c_1d (FFT_SIZE, t[2], f, FFTW_ESTIMATE);
+  plan_bck[0] = fftw_plan_dft_c2r_1d (FFT_SIZE, f, u[0], FFTW_ESTIMATE);
+  plan_bck[1] = fftw_plan_dft_c2r_1d (FFT_SIZE, f, u[1], FFTW_ESTIMATE);
+  plan_bck[2] = fftw_plan_dft_c2r_1d (FFT_SIZE, f, u[2], FFTW_ESTIMATE);
   while (true)
     {
       time_t now;
-      memmove (t[0], t[0] + FFT_HALF_SIZE,
-               sizeof (fftw_complex) * FFT_HALF_SIZE);
-      memmove (t[1], t[1] + FFT_HALF_SIZE,
-               sizeof (fftw_complex) * FFT_HALF_SIZE);
-      memmove (t[2], t[2] + FFT_HALF_SIZE,
-               sizeof (fftw_complex) * FFT_HALF_SIZE);
+      memmove (t[0], t[0] + FFT_HALF_SIZE, sizeof (*t[0]) * FFT_HALF_SIZE);
+      memmove (t[1], t[1] + FFT_HALF_SIZE, sizeof (*t[1]) * FFT_HALF_SIZE);
+      memmove (t[2], t[2] + FFT_HALF_SIZE, sizeof (*t[2]) * FFT_HALF_SIZE);
       // Copy Half sample data
       pthread_mutex_lock (&mutex);
       pthread_cond_wait (&cond, &mutex);
@@ -159,12 +151,9 @@ magnitude_thread (void *arg)
       // set real part of sample data
       for (int i = 0; i < FFT_HALF_SIZE; i++)
         {
-          t[0][i + FFT_HALF_SIZE][0] = p[i * 3 + 0] * (980.665 / 16384.0);
-          t[0][i + FFT_HALF_SIZE][1] = 0;
-          t[1][i + FFT_HALF_SIZE][0] = p[i * 3 + 1] * (980.665 / 16384.0);
-          t[1][i + FFT_HALF_SIZE][1] = 0;
-          t[2][i + FFT_HALF_SIZE][0] = p[i * 3 + 2] * (980.665 / 16384.0);
-          t[2][i + FFT_HALF_SIZE][1] = 0;
+          t[0][i + FFT_HALF_SIZE] = p[i * 3 + 0] * (980.665 / 16384.0);
+          t[1][i + FFT_HALF_SIZE] = p[i * 3 + 1] * (980.665 / 16384.0);
+          t[2][i + FFT_HALF_SIZE] = p[i * 3 + 2] * (980.665 / 16384.0);
         }
       if (count++ == 0)
         continue;
@@ -176,7 +165,7 @@ magnitude_thread (void *arg)
           fftw_execute (plan_fwd[i]);
 
           // Apply filter
-          for (int j = 0; j < FFT_SIZE; j++)
+          for (int j = 0; j < FFT_FREQ_SIZE; j++)
             {
               f[j][0] *= frs[j];
               f[j][1] *= frs[j];
@@ -188,8 +177,7 @@ magnitude_thread (void *arg)
       // convert to scalar accel
       for (int i = 0; i < FFT_SIZE; i++)
         m[i] =
-          sqrt (u[0][i][0] * u[0][i][0] + u[1][i][0] * u[1][i][0] +
-                u[2][i][0] * u[2][i][0]);
+          sqrt (u[0][i] * u[0][i] + u[1][i] * u[1][i] + u[2][i] * u[2][i]);
 
       // sort desc
       int dcomp (const void *a, const void *b)
