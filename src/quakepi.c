@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <pthread.h>
 
+#include <complex.h>
 #include <fftw3.h>
 
 #define FFT_LOG2 9
@@ -166,10 +167,7 @@ magnitude_thread (void *arg)
 
           // Apply filter
           for (int j = 0; j < FFT_FREQ_SIZE; j++)
-            {
-              f[j][0] *= frs[j];
-              f[j][1] *= frs[j];
-            }
+            f[j] *= frs[j];
 
           // Do InvFFT
           fftw_execute (plan_bck[i]);
