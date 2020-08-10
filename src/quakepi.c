@@ -80,6 +80,8 @@ qp_i2c_write (int fd, int addr, int reg, const uint8_t * buf, size_t len)
   return ioctl (fd, I2C_RDWR, &data);
 }
 
+#define HIGH_CUT_FREQ 10.0
+#define LOW_CUT_FREQ 0.5
 static double *
 magnitude_filter_fr (double sample_period, size_t samples)
 {
@@ -88,7 +90,7 @@ magnitude_filter_fr (double sample_period, size_t samples)
   for (int i = 1; i < (samples / 2 + 1); i++)
     {
       double fq = ((double) i / samples) / sample_period;
-      double X2 = (fq / 10) * (fq / 10);
+      double X2 = (fq / HIGH_CUT_FREQ) * (fq / HIGH_CUT_FREQ);
       double fh =
         1 / sqrt (1 +
                   (0.694 +
@@ -96,9 +98,10 @@ magnitude_filter_fr (double sample_period, size_t samples)
                     (0.0557 +
                      (0.009664 +
                       (0.00134 + 0.00155 * X2) * X2) * X2) * X2) * X2) * X2);
-      double l3 = (fq / 0.5) * (fq / 0.5) * (fq / 0.5);
+      double l3 =
+        (fq / LOW_CUT_FREQ) * (fq / LOW_CUT_FREQ) * (fq / LOW_CUT_FREQ);
       double fl = sqrt (1 - exp (-l3));
-      double fc = sqrt (100.0 / i);
+      double fc = 1 / sqrt (fq);
       filter_fr[i] = fh * fl * fc / samples;
     }
   return filter_fr;
