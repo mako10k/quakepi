@@ -301,6 +301,7 @@ main (int argc, char *argv[])
   int tfd = timerfd_create (CLOCK_REALTIME, 0);
   int fd = qp_i2c_open (1);
   uint8_t cntl = 0;
+  int lost_samples = 0;
   uint16_t data[3];
   int idx = 0;
   struct itimerspec its;
@@ -323,6 +324,7 @@ main (int argc, char *argv[])
     {
       uint64_t cnt;
       read (tfd, &cnt, sizeof (cnt));
+      lost_samples += cnt - 1;
       qp_i2c_read (fd, 0x68, 0x3B, (uint8_t *) data, sizeof (data));
       p[idx++] = be16toh (data[0]);
       p[idx++] = be16toh (data[1]);
@@ -331,9 +333,13 @@ main (int argc, char *argv[])
         {
           pthread_mutex_lock (&mutex);
           memcpy (p_to, p, sizeof (p_to));
+          if (opt_verbose && lost_samples)
+            fprintf (stderr, "lost samples %d times, please change options\n",
+                     lost_samples);
           pthread_mutex_unlock (&mutex);
           pthread_cond_signal (&cond);
           idx = 0;
+          lost_samples = 0;
         }
     }
   exit (EXIT_SUCCESS);
