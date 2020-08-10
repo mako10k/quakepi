@@ -54,22 +54,18 @@ qp_i2c_read (int fd, int addr, int reg, uint8_t * buf, size_t len)
 static int
 qp_i2c_write (int fd, int addr, int reg, const uint8_t * buf, size_t len)
 {
-  uint8_t regbuf = reg;
+  uint8_t wbuf[len + 1];
+  wbuf[0] = reg;
+  memcpy (wbuf + 1, buf, len);
   struct i2c_msg msgs[] = {
     {
      .addr = addr,
      .flags = 0,
-     .len = 1,
-     .buf = &regbuf,
-     },
-    {
-     .addr = addr,
-     .flags = 0,
-     .len = len,
-     .buf = (uint8_t *) buf,
+     .len = len + 1,
+     .buf = wbuf,
      }
   };
-  struct i2c_rdwr_ioctl_data data = { msgs, 2 };
+  struct i2c_rdwr_ioctl_data data = { msgs, 1 };
   return ioctl (fd, I2C_RDWR, &data);
 }
 
@@ -215,7 +211,9 @@ magnitude_thread (void *arg)
       double magnitude = 2 * log10 (m[idx]) + 0.94;
       char date[64];
       strftime (date, sizeof (date), "%Y-%m-%d %H:%M:%S", localtime (&now));
-      printf ("%s,%4.2lf,%6.2lf\n", date, magnitude, m[idx]);
+      magnitude = floor (round (magnitude * 100) / 10) / 10;
+      printf ("%s,%.1lf,%.2lf\n", date, magnitude, m[idx]);
+      fflush (stdout);
     }
   return NULL;
 }
@@ -312,6 +310,7 @@ main (int argc, char *argv[])
   its.it_value.tv_nsec = (sampling_period - its.it_value.tv_sec) * 1000000000;
   its.it_interval = its.it_value;
   timerfd_settime (tfd, 0, &its, NULL);
+  qp_i2c_write (fd, 0x68, 0x1C, &cntl, sizeof (cntl));
   qp_i2c_write (fd, 0x68, 0x6B, &cntl, sizeof (cntl));
 
   struct thread_args args = {
