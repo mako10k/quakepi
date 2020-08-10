@@ -61,12 +61,13 @@ qp_i2c_read (int fd, int addr, int reg, uint8_t * buf, size_t len)
 static int
 qp_i2c_write (int fd, int addr, int reg, const uint8_t * buf, size_t len)
 {
+  uint8_t regbuf = reg;
   struct i2c_msg msgs[] = {
     {
      .addr = addr,
      .flags = 0,
      .len = 1,
-     .buf = (void *) &reg,
+     .buf = &regbuf,
      },
     {
      .addr = addr,
