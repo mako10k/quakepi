@@ -17,9 +17,11 @@ AC_CHECK_LIB([fftw3], [main])
 AC_CHECK_LIB([m], [main])
 # FIXME: Replace `main' with a function in `-lpthread':
 AC_CHECK_LIB([pthread], [main])
+# FIXME: Replace `main' with a function in `-lqsortrank':
+AC_CHECK_LIB([qsortrank], [main])
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h inttypes.h stdlib.h string.h sys/ioctl.h sys/time.h unistd.h])
+AC_CHECK_HEADERS([fcntl.h inttypes.h stdlib.h string.h sys/ioctl.h sys/time.h unistd.h qsortrank.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_INT16_T
@@ -30,8 +32,7 @@ AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
 
 # Checks for library functions.
-AC_FUNC_MALLOC
-AC_CHECK_FUNCS([memmove sqrt])
+AC_CHECK_FUNCS([memmove sqrt floor strtol])
 
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT

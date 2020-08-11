@@ -1,3 +1,7 @@
+#if HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -20,6 +24,10 @@
 
 #include <complex.h>
 #include <fftw3.h>
+
+#if HAVE_QSORTRANK_H
+#include <qsortrank.h>
+#endif
 
 static int
 qp_i2c_open (int bus)
@@ -202,10 +210,14 @@ magnitude_thread (void *arg)
       {
         return *(double *) a > *(double *) b ? -1 : 1;
       }
-      qsort (m, args->samples, sizeof (double), dcomp);
-
       // select max 0.3sec accel
       int idx = 0.3 / args->sampling_period;
+
+#if HAVE_QSORTRANK_H
+      qsortrank (m, args->samples, sizeof (double), idx, dcomp);
+#else
+      qsort (m, args->samples, sizeof (double), dcomp);
+#endif
 
       // convert accel to magnitude
       double magnitude = 2 * log10 (m[idx]) + 0.94;
